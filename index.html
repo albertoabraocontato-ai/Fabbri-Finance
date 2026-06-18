@@ -813,11 +813,23 @@ async function salvarMiniCat(){
     const sel=document.getElementById(_miniCatTarget);
     if(sel){const o=document.createElement('option');o.value=nova.id;o.textContent=nova.nome;sel.appendChild(o);sel.value=nova.id;}
   }
-  // Aplica na linha do OFX
-  if(_miniCatOFX!==null&&window._ofx){
-    window._ofx[_miniCatOFX].catId=nova.id;
-    const sel=document.getElementById('ofxSel'+_miniCatOFX);
-    if(sel){const o=document.createElement('option');o.value=nova.id;o.textContent=nova.nome;o.selected=true;sel.appendChild(o);sel.value=nova.id;}
+  // Aplica na linha clicada do OFX e atualiza TODOS os outros dropdowns
+  if(window._ofx){
+    window._ofx.forEach((t,i)=>{
+      const sel=document.getElementById('ofxSel'+i);
+      if(!sel) return;
+      // Adiciona a nova categoria em todos os selects que ainda não a têm
+      if(!sel.querySelector('option[value="'+nova.id+'"]')){
+        const o=document.createElement('option');
+        o.value=nova.id;o.textContent=nova.nome;
+        sel.appendChild(o);
+      }
+      // Aplica na linha específica onde o usuário clicou
+      if(i===_miniCatOFX){
+        window._ofx[i].catId=nova.id;
+        sel.value=nova.id;
+      }
+    });
   }
   btn.disabled=false;renderCats();
 }
