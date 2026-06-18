@@ -325,7 +325,13 @@ tr:hover .row-actions{opacity:1}
         <div><label class="form-label">Valor (R$)</label><input type="number" class="form-input" id="fVal" step="0.01" placeholder="0,00"></div>
       </div>
       <div class="form-row"><label class="form-label">Descrição</label><input type="text" class="form-input" id="fDesc" placeholder="Ex: Bala Fini, PIX cliente..."></div>
-      <div class="form-row"><label class="form-label">Categoria</label><select class="form-select" id="fCat"></select></div>
+      <div class="form-row">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <label class="form-label" style="margin:0">Categoria</label>
+          <button onclick="abrirMiniCat('fCat')" style="background:none;border:none;color:var(--g);font-size:11px;cursor:pointer;font-family:sans-serif">+ Nova categoria</button>
+        </div>
+        <select class="form-select" id="fCat"></select>
+      </div>
       <div class="toggle-row"><span class="toggle-label">Parcelado no crédito?</span><label class="toggle"><input type="checkbox" id="fParc" onchange="toggleParc()"><span class="tslider"></span></label></div>
       <div id="parcArea" style="display:none">
         <div class="form-row-2">
@@ -359,8 +365,27 @@ tr:hover .row-actions{opacity:1}
     <div class="modal-bd">
       <div class="form-row"><label class="form-label">Descrição</label><input type="text" class="form-input" id="fiDesc" placeholder="Ex: Aluguel, Internet..."></div>
       <div class="form-row"><label class="form-label">Valor mensal (R$)</label><input type="number" class="form-input" id="fiVal" step="0.01"></div>
-      <div class="form-row"><label class="form-label">Categoria</label><select class="form-select" id="fiCat"></select></div>
+      <div class="form-row">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <label class="form-label" style="margin:0">Categoria</label>
+          <button onclick="abrirMiniCat('fiCat')" style="background:none;border:none;color:var(--g);font-size:11px;cursor:pointer;font-family:sans-serif">+ Nova categoria</button>
+        </div>
+        <select class="form-select" id="fiCat"></select>
+      </div>
       <button class="btn-save" id="btnSalvarFixo" onclick="salvarFixo()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MINI MODAL CATEGORIA RÁPIDA -->
+<div class="modal-overlay" id="modalMiniCat">
+  <div class="modal" style="width:380px">
+    <div class="modal-hd"><span class="modal-title">Nova categoria</span><button class="modal-close" onclick="fechar('modalMiniCat')">×</button></div>
+    <div class="modal-bd">
+      <div class="form-row"><label class="form-label">Nome</label><input type="text" class="form-input" id="mcNome" placeholder="Ex: Uber, Ifood, Fornecedor..."></div>
+      <div class="form-row"><label class="form-label">Tipo</label><select class="form-select" id="mcTipo"><option value="saida">Saída (custo)</option><option value="entrada">Entrada (receita)</option><option value="ambos">Ambos</option></select></div>
+      <div class="form-row"><label class="form-label">Cor</label><input type="color" id="mcCor" value="#7B3348" style="width:100%;height:36px;border:1px solid var(--border);border-radius:var(--rs);background:var(--surface3);cursor:pointer;padding:2px 4px"></div>
+      <button class="btn-save" id="btnSalvarMiniCat" onclick="salvarMiniCat()">Criar e aplicar</button>
     </div>
   </div>
 </div>
@@ -468,7 +493,7 @@ function toLancDB(l) {
 }
 function fromLancDB(r) {
   return {
-    id: r.id, data: r.data, valor: parseFloat(r.valor),
+    id: r.id, data: (r.data||'').slice(0,10), valor: parseFloat(r.valor),
     desc: r.descricao, catId: r.cat_id, tipo: r.tipo,
     fixo: r.fixo, parcelas: r.parcelas, parcAtual: r.parc_atual
   };
@@ -570,7 +595,7 @@ function renderCats() {
 
 function renderParc() {
   const cp=lancs.filter(l=>l.parcelas&&l.parcAtual<l.parcelas);let tot=0;
-  document.getElementById('tblParc').innerHTML=cp.map(l=>{const r=l.parcelas-l.parcAtual;const tr=l.valor*r;tot+=tr;const pm=new Date(l.data);pm.setMonth(pm.getMonth()+1);return`<tr><td style="color:var(--text)">${l.desc}</td><td><span class="badge badge-parc">${l.parcAtual} de ${l.parcelas}</span></td><td>${MABR[pm.getMonth()]} ${pm.getFullYear()}</td><td class="vn" style="text-align:right">–${fmt(l.valor)}</td><td class="vn" style="text-align:right">–${fmt(tr)}</td></tr>`}).join('')||'<tr><td colspan="5" class="empty">Nenhuma parcela</td></tr>';
+  document.getElementById('tblParc').innerHTML=cp.map(l=>{const r=l.parcelas-l.parcAtual;const tr=l.valor*r;tot+=tr;const pts=l.data.split('-');const pm=new Date(parseInt(pts[0]),parseInt(pts[1])-1+1,1);return`<tr><td style="color:var(--text)">${l.desc}</td><td><span class="badge badge-parc">${l.parcAtual} de ${l.parcelas}</span></td><td>${MABR[pm.getMonth()]} ${pm.getFullYear()}</td><td class="vn" style="text-align:right">–${fmt(l.valor)}</td><td class="vn" style="text-align:right">–${fmt(tr)}</td></tr>`}).join('')||'<tr><td colspan="5" class="empty">Nenhuma parcela</td></tr>';
   document.getElementById('resumoParc').innerHTML=cp.length?`${cp.length} compras em aberto · Total: <strong style="color:var(--err)">${fmt(tot)}</strong>`:'';
 }
 
@@ -758,6 +783,43 @@ async function delFixo(id) {
   loading(false);
 }
 
+// MINI MODAL CATEGORIA RÁPIDA
+let _miniCatTarget=null, _miniCatOFX=null;
+function abrirMiniCat(selectId,ofxIdx=null){
+  _miniCatTarget=selectId;_miniCatOFX=ofxIdx;
+  document.getElementById('mcNome').value='';
+  document.getElementById('mcCor').value='#7B3348';
+  document.getElementById('btnSalvarMiniCat').disabled=false;
+  document.getElementById('modalMiniCat').classList.add('open');
+  setTimeout(()=>document.getElementById('mcNome').focus(),100);
+}
+async function salvarMiniCat(){
+  const btn=document.getElementById('btnSalvarMiniCat');
+  if(btn.disabled)return;
+  const nome=document.getElementById('mcNome').value.trim();
+  if(!nome){toast('Digite o nome',true);return}
+  btn.disabled=true;loading(true,'Criando categoria...');
+  const nova={id:'c'+Date.now(),nome,tipo:document.getElementById('mcTipo').value,cor:document.getElementById('mcCor').value};
+  const ok=await dbInsert('categorias',toCatDB(nova));
+  loading(false);
+  if(!ok){btn.disabled=false;return}
+  cats.push(nova);
+  fechar('modalMiniCat');
+  toast('"'+nome+'" criada e aplicada');
+  // Aplica no select do modal (fixo ou lançamento)
+  if(_miniCatTarget){
+    const sel=document.getElementById(_miniCatTarget);
+    if(sel){const o=document.createElement('option');o.value=nova.id;o.textContent=nova.nome;sel.appendChild(o);sel.value=nova.id;}
+  }
+  // Aplica na linha do OFX
+  if(_miniCatOFX!==null&&window._ofx){
+    window._ofx[_miniCatOFX].catId=nova.id;
+    const sel=document.getElementById('ofxSel'+_miniCatOFX);
+    if(sel){const o=document.createElement('option');o.value=nova.id;o.textContent=nova.nome;o.selected=true;sel.appendChild(o);sel.value=nova.id;}
+  }
+  btn.disabled=false;renderCats();
+}
+
 // META — salva no localStorage (é preferência local)
 async function salvarMeta() {
   const v=parseFloat(document.getElementById('metaInp').value);
@@ -812,7 +874,7 @@ function renderOFXPreview(ts){
   window._ofx=ts;
   document.getElementById('ofxRows').innerHTML=ts.map((t,i)=>{
     const opts=cats.map(c=>`<option value="${c.id}"${c.id===t.catId?' selected':''}>${c.nome}</option>`).join('');
-    return`<div class="ofx-row"><input type="checkbox" class="ofx-check" id="chk${i}" checked onchange="window._ofx[${i}].selecionado=this.checked"><div style="flex:1"><div class="ofx-desc">${t.desc}</div><div style="font-size:10px;color:var(--text3)">${fmtD(t.data)} · ${t.tipo==='entrada'?'↑':'↓'}</div></div><div class="${t.tipo==='entrada'?'vp':'vn'}" style="min-width:85px;text-align:right;font-size:12px">${t.tipo==='entrada'?'+':'–'}${fmt(t.valor)}</div><select class="ofx-cat-sel" onchange="window._ofx[${i}].catId=this.value">${opts}</select></div>`;
+    return`<div class="ofx-row"><input type="checkbox" class="ofx-check" id="chk${i}" checked onchange="window._ofx[${i}].selecionado=this.checked"><div style="flex:1"><div class="ofx-desc">${t.desc}</div><div style="font-size:10px;color:var(--text3)">${fmtD(t.data)} · ${t.tipo==='entrada'?'↑':'↓'}</div></div><div class="${t.tipo==='entrada'?'vp':'vn'}" style="min-width:85px;text-align:right;font-size:12px">${t.tipo==='entrada'?'+':'–'}${fmt(t.valor)}</div><select class="ofx-cat-sel" id="ofxSel${i}" onchange="window._ofx[${i}].catId=this.value">${opts}</select><button onclick="abrirMiniCat(null,${i})" style="background:none;border:1px solid var(--border2);color:var(--g);font-size:10px;padding:3px 8px;border-radius:5px;cursor:pointer;white-space:nowrap;font-family:sans-serif">+ Cat.</button></div>`;
   }).join('');
 }
 
