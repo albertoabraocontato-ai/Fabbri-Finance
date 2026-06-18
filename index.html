@@ -273,6 +273,8 @@ tr:hover .row-actions{opacity:1}
             <div style="display:flex;gap:8px">
               <button class="btn-ghost" onclick="selecionarTodos(true)">Marcar todos</button>
               <button class="btn-ghost" onclick="selecionarTodos(false)">Desmarcar</button>
+              <button class="btn-ghost" onclick="salvarRascunho()" id="btnRascunho"><i class="ti ti-device-floppy"></i> Salvar rascunho</button>
+              <button class="btn-ghost" onclick="carregarRascunho()" id="btnCarregarRascunho" style="display:none"><i class="ti ti-refresh"></i> Retomar rascunho</button>
               <button class="btn-primary" id="btnConfirmarOFX" onclick="confirmarOFX()"><i class="ti ti-check"></i>Confirmar</button>
             </div>
           </div>
@@ -896,8 +898,42 @@ async function confirmarOFX() {
   btn.disabled=false;
   document.getElementById('ofxPreview').style.display='none';
   document.getElementById('ofxFile').value='';
+  limparRascunho();
   renderDash();
   toast(ok_count+' transações importadas');
+}
+
+// RASCUNHO OFX
+const RASCUNHO_KEY = 'ff_ofx_rascunho';
+
+function salvarRascunho() {
+  if(!window._ofx||!window._ofx.length){toast('Nada para salvar',true);return}
+  window._ofx.forEach((t,i)=>{
+    const sel=document.getElementById('ofxSel'+i);
+    if(sel) t.catId=sel.value;
+    const chk=document.getElementById('chk'+i);
+    if(chk) t.selecionado=chk.checked;
+  });
+  const rascunho={ts:window._ofx,salvoEm:new Date().toISOString()};
+  localStorage.setItem(RASCUNHO_KEY,JSON.stringify(rascunho));
+  document.getElementById('btnCarregarRascunho').style.display='inline-flex';
+  toast('Rascunho salvo — pode fechar tranquilo');
+}
+
+function carregarRascunho() {
+  const raw=localStorage.getItem(RASCUNHO_KEY);
+  if(!raw){toast('Nenhum rascunho encontrado',true);return}
+  const r=JSON.parse(raw);
+  const d=new Date(r.salvoEm);
+  const label=d.getDate()+'/'+(d.getMonth()+1)+' às '+d.getHours()+':'+String(d.getMinutes()).padStart(2,'0');
+  renderOFXPreview(r.ts);
+  toast('Rascunho carregado — salvo em '+label);
+}
+
+function limparRascunho() {
+  localStorage.removeItem(RASCUNHO_KEY);
+  const btn=document.getElementById('btnCarregarRascunho');
+  if(btn) btn.style.display='none';
 }
 
 const PT={'dashboard':'Dashboard','lancamentos':'Lançamentos','importar':'Importar OFX','fixos':'Custos Fixos','categorias':'Categorias','parcelas':'Parcelas em Aberto','relatorio':'Relatório Mensal'};
@@ -910,6 +946,11 @@ function showView(v,el){
   if(el)el.classList.add('active');
   document.getElementById('pageTitle').textContent=PT[v]||v;
   document.getElementById('topbarActions').innerHTML=TA[v]||'';
+  if(v==='importar'){
+    const raw=localStorage.getItem('ff_ofx_rascunho');
+    const btn=document.getElementById('btnCarregarRascunho');
+    if(btn) btn.style.display=raw?'inline-flex':'none';
+  }
   if(v==='dashboard')renderDash();
   if(v==='lancamentos')renderLancs();
   if(v==='categorias')renderCats();
