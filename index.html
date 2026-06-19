@@ -152,6 +152,7 @@ tr:hover .row-actions{opacity:1}
 .tipo-opt{flex:1;padding:9px;text-align:center;font-size:12px;cursor:pointer;color:var(--text3);background:none;border:none;font-weight:500}
 .tipo-opt.ae{background:var(--ok2);color:var(--ok)}
 .tipo-opt.as{background:var(--err2);color:var(--err)}
+.tipo-opt.ar{background:#1a1a3d;color:#9d9fd4}
 .toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .toggle-label{font-size:12px;color:var(--text2)}
 .toggle{position:relative;width:38px;height:21px}
@@ -251,6 +252,7 @@ tr:hover .row-actions{opacity:1}
             <button class="fpill active" onclick="filtrar('todos',this)">Todos</button>
             <button class="fpill" onclick="filtrar('entrada',this)">Entradas</button>
             <button class="fpill" onclick="filtrar('saida',this)">Saídas</button>
+            <button class="fpill" onclick="filtrar('retirada',this)">Retiradas</button>
             <div class="search-wrap"><i class="ti ti-search"></i><input class="search-input" id="buscaInp" placeholder="Buscar..." oninput="renderLancs()"></div>
           </div>
           <button class="btn-primary" onclick="abrirModal()"><i class="ti ti-plus"></i>Novo lançamento</button>
@@ -321,7 +323,14 @@ tr:hover .row-actions{opacity:1}
   <div class="modal">
     <div class="modal-hd"><span class="modal-title" id="mTitle">Novo lançamento</span><button class="modal-close" onclick="fechar('modalLanc')">×</button></div>
     <div class="modal-bd">
-      <div class="form-row"><div class="tipo-toggle"><button class="tipo-opt ae" id="btnE" onclick="setTipo('entrada')"><i class="ti ti-arrow-up"></i> Entrada</button><button class="tipo-opt" id="btnS" onclick="setTipo('saida')"><i class="ti ti-arrow-down"></i> Saída</button></div></div>
+      <div class="form-row"><div class="tipo-toggle"><button class="tipo-opt ae" id="btnE" onclick="setTipo('entrada')"><i class="ti ti-arrow-up"></i> Entrada</button><button class="tipo-opt" id="btnS" onclick="setTipo('saida')"><i class="ti ti-arrow-down"></i> Saída</button><button class="tipo-opt" id="btnR" onclick="setTipo('retirada')"><i class="ti ti-wallet"></i> Retirada</button></div></div>
+      <div class="form-row">
+        <label class="form-label">Conta / Origem</label>
+        <select class="form-select" id="fConta">
+          <option value="sicoob">Sicoob</option>
+          <option value="mercadopago">Mercado Pago</option>
+        </select>
+      </div>
       <div class="form-row-2">
         <div><label class="form-label">Data</label><input type="date" class="form-input" id="fData"></div>
         <div><label class="form-label">Valor (R$)</label><input type="number" class="form-input" id="fVal" step="0.01" placeholder="0,00"></div>
@@ -446,6 +455,7 @@ const CATS_DEF=[
   {id:'c8',nome:'Vendas de Cestas',tipo:'entrada',cor:'#4caf7d'},
   {id:'c9',nome:'Método FBB / Mentorias',tipo:'entrada',cor:'#4c8faf'},
   {id:'c10',nome:'Outros',tipo:'ambos',cor:'#7a6a62'},
+  {id:'c11',nome:'Retirada / Pró-labore',tipo:'saida',cor:'#9d9fd4'},
 ];
 
 let lancs=[], cats=[], fixos=[], meta=0;
@@ -490,14 +500,16 @@ function toLancDB(l) {
     tipo: l.tipo,
     fixo: l.fixo || false,
     parcelas: l.parcelas || null,
-    parc_atual: l.parcAtual || null
+    parc_atual: l.parcAtual || null,
+    conta: l.conta || 'sicoob'
   };
 }
 function fromLancDB(r) {
   return {
     id: r.id, data: (r.data||'').slice(0,10), valor: parseFloat(r.valor),
     desc: r.descricao, catId: r.cat_id, tipo: r.tipo,
-    fixo: r.fixo, parcelas: r.parcelas, parcAtual: r.parc_atual
+    fixo: r.fixo, parcelas: r.parcelas, parcAtual: r.parc_atual,
+    conta: r.conta || 'sicoob'
   };
 }
 function toCatDB(c) {
@@ -531,17 +543,18 @@ function calcM(m,a) {
   const ls=getLancs(m,a);
   const e=ls.filter(l=>l.tipo==='entrada').reduce((s,l)=>s+l.valor,0);
   const s=ls.filter(l=>l.tipo==='saida').reduce((s,l)=>s+l.valor,0);
-  return{e,s,saldo:e-s,margem:e>0?(e-s)/e*100:0};
+  const r=ls.filter(l=>l.tipo==='retirada').reduce((s,l)=>s+l.valor,0);
+  return{e,s,r,saldo:e-s-r,margem:e>0?(e-s)/e*100:0};
 }
 
 function renderDash() {
-  const{e,s,saldo,margem}=calcM();
-  const sG=lancs.reduce((a,l)=>l.tipo==='entrada'?a+l.valor:a-l.valor,0);
+  const{e,s,r,saldo,margem}=calcM();
+  const sG=lancs.reduce((a,l)=>l.tipo==='entrada'?a+l.valor:l.tipo==='retirada'?a:a-l.valor,0);
   document.getElementById('metricsArea').innerHTML=`
     <div class="mcard ce"><div class="mcard-label">Entradas</div><div class="mcard-val ok">${fmt(e)}</div><div class="mcard-sub">receitas do mês</div></div>
-    <div class="mcard cs"><div class="mcard-label">Saídas</div><div class="mcard-val err">${fmt(s)}</div><div class="mcard-sub">custos do mês</div></div>
-    <div class="mcard cr"><div class="mcard-label">Resultado</div><div class="mcard-val ${saldo>=0?'ok':'err'}">${saldo>=0?'+':''}${fmt(saldo)}</div><div class="mcard-sub">${saldo>=0?'lucro':'prejuízo'}</div></div>
-    <div class="mcard cg"><div class="mcard-label">Saldo geral</div><div class="mcard-val gold">${fmt(sG)}</div><div class="mcard-sub">todos os períodos</div></div>
+    <div class="mcard cs"><div class="mcard-label">Custos operacionais</div><div class="mcard-val err">${fmt(s)}</div><div class="mcard-sub">não inclui retiradas</div></div>
+    <div class="mcard cr"><div class="mcard-label">Retiradas</div><div class="mcard-val" style="color:#9d9fd4">${fmt(r)}</div><div class="mcard-sub">pró-labore e lucro</div></div>
+    <div class="mcard cg"><div class="mcard-label">Resultado operacional</div><div class="mcard-val ${(e-s)>=0?'ok':'err'}">${(e-s)>=0?'+':''}${fmt(e-s)}</div><div class="mcard-sub">antes das retiradas</div></div>
   `;
   const mp=Math.max(0,Math.min(100,margem));
   document.getElementById('heroBox').innerHTML=`
@@ -571,7 +584,9 @@ function renderDash() {
     return`<div class="cat-row"><div class="cat-top"><span class="cat-name">${c.nome}</span><span class="cat-val-txt">${fmt(val)}</span></div><div class="cat-bg"><div class="cat-fill" style="width:${(val/mx*100).toFixed(0)}%;background:${c.cor}"></div></div></div>`;
   }).join('')||'<div class="empty">Sem saídas</div>';
   const rec=[...ls].sort((a,b)=>b.data.localeCompare(a.data)).slice(0,5);
-  document.getElementById('tblRec').innerHTML=rec.map(l=>{const c=catById(l.catId);return`<tr><td>${fmtD(l.data)}</td><td style="color:var(--text)">${l.desc}${l.parcelas?` <span class="badge badge-parc">${l.parcAtual}/${l.parcelas}x</span>`:''}</td><td><span class="badge" style="background:${c.cor}22;color:${c.cor};border:1px solid ${c.cor}44">${c.nome}</span></td><td class="${l.tipo==='entrada'?'vp':'vn'}" style="text-align:right">${l.tipo==='entrada'?'+':'–'}${fmt(l.valor)}</td></tr>`}).join('')||'<tr><td colspan="4" class="empty">Nenhum lançamento</td></tr>';
+  document.getElementById('tblRec').innerHTML=rec.map(l=>{const c=catById(l.catId);const recCor=l.tipo==='entrada'?'vp':l.tipo==='retirada'?'':'vn';
+    const recColor=l.tipo==='retirada'?'color:#9d9fd4':'';
+    return`<tr><td>${fmtD(l.data)}</td><td style="color:var(--text)">${l.desc}${l.parcelas?` <span class="badge badge-parc">${l.parcAtual}/${l.parcelas}x</span>`:''}</td><td><span class="badge" style="background:${c.cor}22;color:${c.cor};border:1px solid ${c.cor}44">${c.nome}</span></td><td class="${recCor}" style="text-align:right;${recColor}">${l.tipo==='entrada'?'+':'–'}${fmt(l.valor)}</td></tr>`}).join('')||'<tr><td colspan="4" class="empty">Nenhum lançamento</td></tr>';
   const ab=lancs.filter(l=>l.parcelas&&l.parcAtual<l.parcelas);
   document.getElementById('parcDash').innerHTML=ab.slice(0,5).map(l=>{const r=l.parcelas-l.parcAtual;return`<div class="parc-item"><div><div class="parc-desc">${l.desc}</div><div class="parc-detail">${r} parcela${r>1?'s':''} restantes</div></div><div class="parc-val-txt">–${fmt(l.valor*r)}</div></div>`}).join('')||'<div class="empty">Nenhuma parcela</div>';
 }
@@ -582,7 +597,10 @@ function renderLancs() {
   if(filtroT!=='todos')ls=ls.filter(l=>l.tipo===filtroT);
   if(busca)ls=ls.filter(l=>l.desc.toLowerCase().includes(busca));
   ls.sort((a,b)=>b.data.localeCompare(a.data));
-  document.getElementById('tblCompleta').innerHTML=ls.map(l=>{const c=catById(l.catId);return`<tr><td>${fmtD(l.data)}</td><td style="color:var(--text)">${l.desc}${l.parcelas?` <span class="badge badge-parc">${l.parcAtual}/${l.parcelas}x</span>`:''}</td><td><span class="badge" style="background:${c.cor}22;color:${c.cor};border:1px solid ${c.cor}44">${c.nome}</span></td><td>${l.fixo?'<span class="badge badge-fixo">Fixo</span> ':''}<span style="color:var(--text3)">${l.tipo==='entrada'?'Entrada':'Saída'}</span></td><td class="${l.tipo==='entrada'?'vp':'vn'}" style="text-align:right">${l.tipo==='entrada'?'+':'–'}${fmt(l.valor)}</td><td><div class="row-actions"><button class="btn-row" onclick="editLanc('${l.id}')"><i class="ti ti-edit"></i></button><button class="btn-row del" onclick="delLanc('${l.id}')"><i class="ti ti-trash"></i></button></div></td></tr>`}).join('')||'<tr><td colspan="6" class="empty">Nenhum lançamento</td></tr>';
+  document.getElementById('tblCompleta').innerHTML=ls.map(l=>{const c=catById(l.catId);const tipoLabel=l.tipo==='entrada'?'Entrada':l.tipo==='retirada'?'Retirada':'Saída';
+    const tipoColor=l.tipo==='entrada'?'vp':l.tipo==='retirada'?'':'vn';
+    const contaLabel=l.conta==='mercadopago'?'<span class="badge" style="background:#00296622;color:#00b4d8;border:1px solid #00b4d844;margin-left:4px">MP</span>':'';
+    return`<tr><td>${fmtD(l.data)}</td><td style="color:var(--text)">${l.desc}${l.parcelas?` <span class="badge badge-parc">${l.parcAtual}/${l.parcelas}x</span>`:''}${contaLabel}</td><td><span class="badge" style="background:${c.cor}22;color:${c.cor};border:1px solid ${c.cor}44">${c.nome}</span></td><td>${l.fixo?'<span class="badge badge-fixo">Fixo</span> ':''}<span style="color:var(--text3)">${tipoLabel}</span></td><td class="${tipoColor}" style="text-align:right;color:${l.tipo==='retirada'?'#9d9fd4':''}">${l.tipo==='entrada'?'+':'–'}${fmt(l.valor)}</td><td><div class="row-actions"><button class="btn-row" onclick="editLanc('${l.id}')"><i class="ti ti-edit"></i></button><button class="btn-row del" onclick="delLanc('${l.id}')"><i class="ti ti-trash"></i></button></div></td></tr>`}).join('')||'<tr><td colspan="6" class="empty">Nenhum lançamento</td></tr>';
 }
 
 function renderFixos() {
@@ -617,9 +635,13 @@ function renderRel() {
         ${e.map(l=>`<div class="rel-row"><span>${fmtD(l.data)} — ${l.desc}</span><span class="vp">+${fmt(l.valor)}</span></div>`).join('')||'<div style="color:var(--text3);font-size:12px">Sem entradas</div>'}
         <div class="rel-total"><span>Total de entradas</span><span class="vp">+${fmt(te)}</span></div>
       </div>
-      <div class="rel-section"><div class="rel-title">Custos por categoria</div>
+      <div class="rel-section"><div class="rel-title">Custos operacionais por categoria</div>
         ${Object.entries(cg).sort((a,b)=>b[1]-a[1]).map(([cid,v])=>{const c=catById(cid);return`<div class="rel-row"><span style="display:flex;align-items:center;gap:7px"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${c.cor}"></span>${c.nome}</span><span class="vn">–${fmt(v)}</span></div>`}).join('')}
-        <div class="rel-total"><span>Total de saídas</span><span class="vn">–${fmt(ts)}</span></div>
+        <div class="rel-total"><span>Total de custos operacionais</span><span class="vn">–${fmt(ts)}</span></div>
+      </div>
+      <div class="rel-section"><div class="rel-title">Retiradas (pró-labore / distribuição de lucro)</div>
+        ${ls.filter(l=>l.tipo==='retirada').map(l=>`<div class="rel-row"><span>${fmtD(l.data)} — ${l.desc}</span><span style="color:#9d9fd4">–${fmt(l.valor)}</span></div>`).join('')||'<div style="color:var(--text3);font-size:12px">Nenhuma retirada</div>'}
+        <div class="rel-total"><span>Total retirado</span><span style="color:#9d9fd4">–${fmt(ls.filter(l=>l.tipo==='retirada').reduce((a,l)=>a+l.valor,0))}</span></div>
       </div>
       <div style="background:var(--surface3);border-radius:var(--rs);padding:16px">
         <div class="rel-row" style="border:none;margin-bottom:6px"><span style="font-size:14px;font-weight:600;color:var(--text)">Resultado</span><span class="${res>=0?'vp':'vn'}" style="font-size:18px;font-weight:700">${res>=0?'+':''}${fmt(res)}</span></div>
@@ -671,6 +693,7 @@ function abrirModal(pre) {
   document.getElementById('parcArea').style.display='none';
   setTipo(pre?.tipo||'entrada');
   if(pre?.catId) setTimeout(()=>document.getElementById('fCat').value=pre.catId,10);
+  document.getElementById('fConta').value=pre?.conta||'sicoob';
   document.getElementById('btnSalvarLanc').disabled=false;
   document.getElementById('modalLanc').classList.add('open');
 }
@@ -681,8 +704,10 @@ function setTipo(t) {
   tipo=t;
   document.getElementById('btnE').className='tipo-opt'+(t==='entrada'?' ae':'');
   document.getElementById('btnS').className='tipo-opt'+(t==='saida'?' as':'');
+  document.getElementById('btnR').className='tipo-opt'+(t==='retirada'?' ar':'');
   const sel=document.getElementById('fCat');
-  sel.innerHTML=cats.filter(c=>c.tipo===t||c.tipo==='ambos').map(c=>`<option value="${c.id}">${c.nome}</option>`).join('');
+  const filtro=t==='retirada'?'saida':t;
+  sel.innerHTML=cats.filter(c=>c.tipo===filtro||c.tipo==='ambos').map(c=>`<option value="${c.id}">${c.nome}</option>`).join('');
 }
 
 function toggleParc(){document.getElementById('parcArea').style.display=document.getElementById('fParc').checked?'block':'none'}
@@ -701,7 +726,8 @@ async function salvarLanc() {
   if(!data||!valor||!desc){toast('Preencha data, valor e descrição',true);return}
   btn.disabled=true;
   loading(true,'Salvando lançamento...');
-  const obj={data,valor,desc,catId,tipo,fixo,parcelas:parc?pt:null,parcAtual:parc?pa:null};
+  const conta=document.getElementById('fConta').value;
+  const obj={data,valor,desc,catId,tipo,fixo,parcelas:parc?pt:null,parcAtual:parc?pa:null,conta};
   if(editId){
     const ok=await dbUpdate('lancamentos',editId,toLancDB({...obj,id:editId}));
     if(ok){const i=lancs.findIndex(l=>l.id===editId);if(i>=0)lancs[i]={...lancs[i],...obj};toast('Atualizado')}
@@ -870,7 +896,7 @@ function parseOFX(text){
     const amt=parseFloat(g('TRNAMT').replace(',','.'));
     const memo=g('MEMO')||g('NAME')||'';
     const data=dp?dp.slice(0,4)+'-'+dp.slice(4,6)+'-'+dp.slice(6,8):new Date().toISOString().split('T')[0];
-    return{data,desc:memo,valor:Math.abs(amt),tipo:amt>=0?'entrada':'saida',catId:detectCat(memo,amt),selecionado:true};
+    return{data,desc:memo,valor:Math.abs(amt),tipo:amt>=0?'entrada':'saida',catId:detectCat(memo,amt),conta:'sicoob',selecionado:true};
   }).filter(t=>t.valor>0);
 }
 
@@ -888,7 +914,7 @@ function renderOFXPreview(ts){
   window._ofx=ts;
   document.getElementById('ofxRows').innerHTML=ts.map((t,i)=>{
     const opts=cats.map(c=>`<option value="${c.id}"${c.id===t.catId?' selected':''}>${c.nome}</option>`).join('');
-    return`<div class="ofx-row"><input type="checkbox" class="ofx-check" id="chk${i}" checked onchange="window._ofx[${i}].selecionado=this.checked"><div style="flex:1"><div class="ofx-desc">${t.desc}</div><div style="font-size:10px;color:var(--text3)">${fmtD(t.data)} · ${t.tipo==='entrada'?'↑':'↓'}</div></div><div class="${t.tipo==='entrada'?'vp':'vn'}" style="min-width:85px;text-align:right;font-size:12px">${t.tipo==='entrada'?'+':'–'}${fmt(t.valor)}</div><select class="ofx-cat-sel" id="ofxSel${i}" onchange="window._ofx[${i}].catId=this.value">${opts}</select><button onclick="abrirMiniCat(null,${i})" style="background:none;border:1px solid var(--border2);color:var(--g);font-size:10px;padding:3px 8px;border-radius:5px;cursor:pointer;white-space:nowrap;font-family:sans-serif">+ Cat.</button></div>`;
+    return`<div class="ofx-row"><input type="checkbox" class="ofx-check" id="chk${i}" checked onchange="window._ofx[${i}].selecionado=this.checked"><div style="flex:1"><div class="ofx-desc">${t.desc}</div><div style="font-size:10px;color:var(--text3)">${fmtD(t.data)} · ${t.tipo==='entrada'?'↑':'↓'}</div></div><div class="${t.tipo==='entrada'?'vp':'vn'}" style="min-width:85px;text-align:right;font-size:12px">${t.tipo==='entrada'?'+':'–'}${fmt(t.valor)}</div><select class="ofx-cat-sel" id="ofxSel${i}" onchange="window._ofx[${i}].catId=this.value">${opts}</select><select class="ofx-cat-sel" style="min-width:110px" onchange="window._ofx[${i}].conta=this.value"><option value="sicoob" ${t.conta==='sicoob'?'selected':''}>Sicoob</option><option value="mercadopago" ${t.conta==='mercadopago'?'selected':''}>Mercado Pago</option></select><button onclick="abrirMiniCat(null,${i})" style="background:none;border:1px solid var(--border2);color:var(--g);font-size:10px;padding:3px 8px;border-radius:5px;cursor:pointer;white-space:nowrap;font-family:sans-serif">+ Cat.</button></div>`;
   }).join('');
 }
 
@@ -902,7 +928,7 @@ async function confirmarOFX() {
   loading(true,`Importando ${sel.length} transações...`);
   let ok_count=0;
   for(const t of sel){
-    const novo={id:uid(),data:t.data,valor:t.valor,desc:t.desc,catId:t.catId,tipo:t.tipo,fixo:false,parcelas:null,parcAtual:null};
+    const novo={id:uid(),data:t.data,valor:t.valor,desc:t.desc,catId:t.catId,tipo:t.tipo,fixo:false,parcelas:null,parcAtual:null,conta:t.conta||'sicoob'};
     const ok=await dbInsert('lancamentos',toLancDB(novo));
     if(ok){lancs.push(novo);ok_count++}
   }
