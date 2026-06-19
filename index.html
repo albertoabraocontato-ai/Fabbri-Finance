@@ -253,6 +253,8 @@ tr:hover .row-actions{opacity:1}
             <button class="fpill" onclick="filtrar('entrada',this)">Entradas</button>
             <button class="fpill" onclick="filtrar('saida',this)">Saídas</button>
             <button class="fpill" onclick="filtrar('retirada',this)">Retiradas</button>
+            <button class="fpill" onclick="filtrar('sicoob',this)">Sicoob</button>
+            <button class="fpill" onclick="filtrar('mercadopago',this)">Mercado Pago</button>
             <div class="search-wrap"><i class="ti ti-search"></i><input class="search-input" id="buscaInp" placeholder="Buscar..." oninput="renderLancs()"></div>
           </div>
           <button class="btn-primary" onclick="abrirModal()"><i class="ti ti-plus"></i>Novo lançamento</button>
@@ -275,6 +277,14 @@ tr:hover .row-actions{opacity:1}
             <div style="display:flex;gap:8px">
               <button class="btn-ghost" onclick="selecionarTodos(true)">Marcar todos</button>
               <button class="btn-ghost" onclick="selecionarTodos(false)">Desmarcar</button>
+              <div style="display:flex;align-items:center;gap:6px;border:1px solid var(--border2);border-radius:var(--rs);padding:4px 10px">
+                <span style="font-size:10px;color:var(--text3);white-space:nowrap">Conta:</span>
+                <select id="contaLote" style="background:none;border:none;color:var(--text2);font-size:11px;outline:none;cursor:pointer">
+                  <option value="sicoob">Sicoob</option>
+                  <option value="mercadopago">Mercado Pago</option>
+                </select>
+                <button class="btn-ghost" style="padding:3px 10px;border:none;border-left:1px solid var(--border2);border-radius:0" onclick="aplicarContaTodos()">Aplicar em todos</button>
+              </div>
               <button class="btn-ghost" onclick="salvarRascunho()" id="btnRascunho"><i class="ti ti-device-floppy"></i> Salvar rascunho</button>
               <button class="btn-ghost" onclick="carregarRascunho()" id="btnCarregarRascunho" style="display:none"><i class="ti ti-refresh"></i> Retomar rascunho</button>
               <button class="btn-primary" id="btnConfirmarOFX" onclick="confirmarOFX()"><i class="ti ti-check"></i>Confirmar</button>
@@ -291,6 +301,42 @@ tr:hover .row-actions{opacity:1}
             <div style="font-size:12px;color:var(--text2)">3. Escolha o período desejado</div>
             <div style="font-size:12px;color:var(--text2)">4. Clique em <strong style="color:var(--text)">Exportar → OFX</strong></div>
             <div style="font-size:12px;color:var(--text2)">5. Importe o arquivo aqui acima</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:20px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+          <span style="font-size:11px;color:var(--text3);white-space:nowrap">ou importe do Mercado Pago</span>
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+        </div>
+        <div class="ofx-zone" onclick="document.getElementById('csvMP').click()" style="border-color:rgba(0,180,216,0.3);background:rgba(0,41,102,0.15)">
+          <div class="ofx-icon" style="color:#00b4d8"><i class="ti ti-brand-mercado-pago" style="font-size:28px">MP</i></div>
+          <div class="ofx-title" style="color:#00b4d8">Importar extrato CSV do Mercado Pago</div>
+          <div class="ofx-sub">MP → Saldos e extratos → Gerar novo extrato → CSV ou XLSX</div>
+          <input type="file" id="csvMP" accept=".csv,.CSV,.xlsx,.XLSX" style="display:none" onchange="processarCSVMP(this)">
+        </div>
+        <div id="csvMPPreview" style="display:none">
+          <div class="tbl-wrap">
+            <div class="tbl-hd">
+              <span style="font-size:12px;color:var(--text2)" id="csvMPCount"></span>
+              <div style="display:flex;gap:8px">
+                <button class="btn-ghost" onclick="selecionarTodosCSV(true)">Marcar todos</button>
+                <button class="btn-ghost" onclick="selecionarTodosCSV(false)">Desmarcar</button>
+                <button class="btn-primary" id="btnConfirmarCSV" onclick="confirmarCSVMP()"><i class="ti ti-check"></i>Confirmar</button>
+              </div>
+            </div>
+            <div id="csvMPRows"></div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:14px"><div class="card-hd"><span class="card-hd-title">Como exportar do Mercado Pago</span></div>
+          <div class="card-bd" style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:12px;color:var(--text2)">1. Acesse o app ou site do <strong style="color:var(--text)">Mercado Pago</strong></div>
+            <div style="font-size:12px;color:var(--text2)">2. Vá em <strong style="color:var(--text)">Saldos e extratos</strong></div>
+            <div style="font-size:12px;color:var(--text2)">3. Clique em <strong style="color:var(--text)">Gerar novo extrato</strong></div>
+            <div style="font-size:12px;color:var(--text2)">4. Escolha o período e formato <strong style="color:var(--text)">CSV</strong></div>
+            <div style="font-size:12px;color:var(--text2)">5. Baixe e importe aqui acima</div>
           </div>
         </div>
       </div>
@@ -463,7 +509,9 @@ let lancs=[], cats=[], fixos=[], meta=0;
 // SUPABASE HELPERS
 async function dbGet(table) {
   if (!db) return [];
-  const { data, error } = await db.from(table).select('*');
+  let query = db.from(table).select('*');
+  if(table==='lancamentos') query = query.order('data', {ascending:false});
+  const { data, error } = await query;
   if (error) { console.error(table, error); return []; }
   return data || [];
 }
@@ -549,7 +597,7 @@ function calcM(m,a) {
 
 function renderDash() {
   const{e,s,r,saldo,margem}=calcM();
-  const sG=lancs.reduce((a,l)=>l.tipo==='entrada'?a+l.valor:l.tipo==='retirada'?a:a-l.valor,0);
+  const sG=lancs.reduce((a,l)=>l.tipo==='entrada'?a+l.valor:a-l.valor,0); // retiradas reduzem saldo real
   document.getElementById('metricsArea').innerHTML=`
     <div class="mcard ce"><div class="mcard-label">Entradas</div><div class="mcard-val ok">${fmt(e)}</div><div class="mcard-sub">receitas do mês</div></div>
     <div class="mcard cs"><div class="mcard-label">Custos operacionais</div><div class="mcard-val err">${fmt(s)}</div><div class="mcard-sub">não inclui retiradas</div></div>
@@ -586,7 +634,8 @@ function renderDash() {
   const rec=[...ls].sort((a,b)=>b.data.localeCompare(a.data)).slice(0,5);
   document.getElementById('tblRec').innerHTML=rec.map(l=>{const c=catById(l.catId);const recCor=l.tipo==='entrada'?'vp':l.tipo==='retirada'?'':'vn';
     const recColor=l.tipo==='retirada'?'color:#9d9fd4':'';
-    return`<tr><td>${fmtD(l.data)}</td><td style="color:var(--text)">${l.desc}${l.parcelas?` <span class="badge badge-parc">${l.parcAtual}/${l.parcelas}x</span>`:''}</td><td><span class="badge" style="background:${c.cor}22;color:${c.cor};border:1px solid ${c.cor}44">${c.nome}</span></td><td class="${recCor}" style="text-align:right;${recColor}">${l.tipo==='entrada'?'+':'–'}${fmt(l.valor)}</td></tr>`}).join('')||'<tr><td colspan="4" class="empty">Nenhum lançamento</td></tr>';
+    const recMP=l.conta==='mercadopago'?'<span class="badge" style="background:#00296622;color:#00b4d8;border:1px solid #00b4d844;margin-left:4px">MP</span>':'';
+    return`<tr><td>${fmtD(l.data)}</td><td style="color:var(--text)">${l.desc}${recMP}${l.parcelas?` <span class="badge badge-parc">${l.parcAtual}/${l.parcelas}x</span>`:''}</td><td><span class="badge" style="background:${c.cor}22;color:${c.cor};border:1px solid ${c.cor}44">${c.nome}</span></td><td class="${recCor}" style="text-align:right;${recColor}">${l.tipo==='entrada'?'+':'–'}${fmt(l.valor)}</td></tr>`}).join('')||'<tr><td colspan="4" class="empty">Nenhum lançamento</td></tr>';
   const ab=lancs.filter(l=>l.parcelas&&l.parcAtual<l.parcelas);
   document.getElementById('parcDash').innerHTML=ab.slice(0,5).map(l=>{const r=l.parcelas-l.parcAtual;return`<div class="parc-item"><div><div class="parc-desc">${l.desc}</div><div class="parc-detail">${r} parcela${r>1?'s':''} restantes</div></div><div class="parc-val-txt">–${fmt(l.valor*r)}</div></div>`}).join('')||'<div class="empty">Nenhuma parcela</div>';
 }
@@ -594,7 +643,11 @@ function renderDash() {
 function renderLancs() {
   const busca=(document.getElementById('buscaInp')?.value||'').toLowerCase();
   let ls=getLancs();
-  if(filtroT!=='todos')ls=ls.filter(l=>l.tipo===filtroT);
+  const contaFiltros=['sicoob','mercadopago'];
+  if(filtroT!=='todos'){
+    if(contaFiltros.includes(filtroT)) ls=ls.filter(l=>l.conta===filtroT);
+    else ls=ls.filter(l=>l.tipo===filtroT);
+  }
   if(busca)ls=ls.filter(l=>l.desc.toLowerCase().includes(busca));
   ls.sort((a,b)=>b.data.localeCompare(a.data));
   document.getElementById('tblCompleta').innerHTML=ls.map(l=>{const c=catById(l.catId);const tipoLabel=l.tipo==='entrada'?'Entrada':l.tipo==='retirada'?'Retirada':'Saída';
@@ -644,8 +697,11 @@ function renderRel() {
         <div class="rel-total"><span>Total retirado</span><span style="color:#9d9fd4">–${fmt(ls.filter(l=>l.tipo==='retirada').reduce((a,l)=>a+l.valor,0))}</span></div>
       </div>
       <div style="background:var(--surface3);border-radius:var(--rs);padding:16px">
-        <div class="rel-row" style="border:none;margin-bottom:6px"><span style="font-size:14px;font-weight:600;color:var(--text)">Resultado</span><span class="${res>=0?'vp':'vn'}" style="font-size:18px;font-weight:700">${res>=0?'+':''}${fmt(res)}</span></div>
-        <div class="rel-row" style="border:none"><span style="color:var(--text3)">Margem de lucro</span><span style="color:var(--g);font-weight:600">${mg.toFixed(1)}%</span></div>
+        <div class="rel-row" style="border:none;margin-bottom:6px"><span style="font-size:14px;font-weight:600;color:var(--text)">Resultado operacional</span><span class="${res>=0?'vp':'vn'}" style="font-size:18px;font-weight:700">${res>=0?'+':''}${fmt(res)}</span></div>
+        <div class="rel-row" style="border:none;margin-bottom:6px"><span style="color:var(--text3)">Margem de lucro</span><span style="color:var(--g);font-weight:600">${mg.toFixed(1)}%</span></div>
+        <div class="rel-row" style="border:none;margin-bottom:4px"><span style="color:var(--text3);font-size:11px">Entradas por conta</span><span></span></div>
+        <div class="rel-row" style="border:none;padding:2px 0"><span style="color:var(--text3);font-size:11px;padding-left:12px">Sicoob</span><span class="vp" style="font-size:11px">+${fmt(ls.filter(l=>l.tipo==='entrada'&&l.conta!=='mercadopago').reduce((a,l)=>a+l.valor,0))}</span></div>
+        <div class="rel-row" style="border:none;padding:2px 0"><span style="color:#00b4d8;font-size:11px;padding-left:12px">Mercado Pago</span><span class="vp" style="font-size:11px">+${fmt(ls.filter(l=>l.tipo==='entrada'&&l.conta==='mercadopago').reduce((a,l)=>a+l.valor,0))}</span></div>
       </div>
     </div></div>
   `;
@@ -653,8 +709,8 @@ function renderRel() {
 
 function exportCSV() {
   const ls=getLancs();
-  const h='Data;Descrição;Tipo;Categoria;Valor\n';
-  const r=ls.map(l=>`${fmtD(l.data)};"${l.desc}";${l.tipo};${catById(l.catId).nome};${(l.tipo==='entrada'?l.valor:-l.valor).toFixed(2)}`).join('\n');
+  const h='Data;Descrição;Tipo;Categoria;Conta;Valor\n';
+  const r=ls.map(l=>`${fmtD(l.data)};"${l.desc}";${l.tipo};${catById(l.catId).nome};${l.conta==='mercadopago'?'Mercado Pago':'Sicoob'};${(l.tipo==='entrada'?l.valor:-l.valor).toFixed(2)}`).join('\n');
   const b=new Blob(['\uFEFF'+h+r],{type:'text/csv;charset=utf-8'});
   const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=`FabbriFinance_${MESES[mes]}_${ano}.csv`;a.click();URL.revokeObjectURL(u);
   toast('CSV exportado');
@@ -813,8 +869,9 @@ async function delFixo(id) {
 
 // MINI MODAL CATEGORIA RÁPIDA
 let _miniCatTarget=null, _miniCatOFX=null;
-function abrirMiniCat(selectId,ofxIdx=null){
-  _miniCatTarget=selectId;_miniCatOFX=ofxIdx;
+let _miniCatSource='ofx'; // 'ofx' ou 'csv'
+function abrirMiniCat(selectId,ofxIdx=null,source='ofx'){
+  _miniCatTarget=selectId;_miniCatOFX=ofxIdx;_miniCatSource=source;
   document.getElementById('mcNome').value='';
   document.getElementById('mcCor').value='#7B3348';
   document.getElementById('btnSalvarMiniCat').disabled=false;
@@ -839,20 +896,20 @@ async function salvarMiniCat(){
     const sel=document.getElementById(_miniCatTarget);
     if(sel){const o=document.createElement('option');o.value=nova.id;o.textContent=nova.nome;sel.appendChild(o);sel.value=nova.id;}
   }
-  // Aplica na linha clicada do OFX e atualiza TODOS os outros dropdowns
-  if(window._ofx){
-    window._ofx.forEach((t,i)=>{
-      const sel=document.getElementById('ofxSel'+i);
+  // Aplica na linha clicada e atualiza TODOS os dropdowns (OFX ou CSV)
+  const fonte=_miniCatSource==='csv'?window._csvMP:window._ofx;
+  const prefixSel=_miniCatSource==='csv'?'csvSel':'ofxSel';
+  if(fonte){
+    fonte.forEach((t,i)=>{
+      const sel=document.getElementById(prefixSel+i);
       if(!sel) return;
-      // Adiciona a nova categoria em todos os selects que ainda não a têm
       if(!sel.querySelector('option[value="'+nova.id+'"]')){
         const o=document.createElement('option');
         o.value=nova.id;o.textContent=nova.nome;
         sel.appendChild(o);
       }
-      // Aplica na linha específica onde o usuário clicou
       if(i===_miniCatOFX){
-        window._ofx[i].catId=nova.id;
+        fonte[i].catId=nova.id;
         sel.value=nova.id;
       }
     });
@@ -914,8 +971,21 @@ function renderOFXPreview(ts){
   window._ofx=ts;
   document.getElementById('ofxRows').innerHTML=ts.map((t,i)=>{
     const opts=cats.map(c=>`<option value="${c.id}"${c.id===t.catId?' selected':''}>${c.nome}</option>`).join('');
-    return`<div class="ofx-row"><input type="checkbox" class="ofx-check" id="chk${i}" checked onchange="window._ofx[${i}].selecionado=this.checked"><div style="flex:1"><div class="ofx-desc">${t.desc}</div><div style="font-size:10px;color:var(--text3)">${fmtD(t.data)} · ${t.tipo==='entrada'?'↑':'↓'}</div></div><div class="${t.tipo==='entrada'?'vp':'vn'}" style="min-width:85px;text-align:right;font-size:12px">${t.tipo==='entrada'?'+':'–'}${fmt(t.valor)}</div><select class="ofx-cat-sel" id="ofxSel${i}" onchange="window._ofx[${i}].catId=this.value">${opts}</select><select class="ofx-cat-sel" style="min-width:110px" onchange="window._ofx[${i}].conta=this.value"><option value="sicoob" ${t.conta==='sicoob'?'selected':''}>Sicoob</option><option value="mercadopago" ${t.conta==='mercadopago'?'selected':''}>Mercado Pago</option></select><button onclick="abrirMiniCat(null,${i})" style="background:none;border:1px solid var(--border2);color:var(--g);font-size:10px;padding:3px 8px;border-radius:5px;cursor:pointer;white-space:nowrap;font-family:sans-serif">+ Cat.</button></div>`;
+    return`<div class="ofx-row"><input type="checkbox" class="ofx-check" id="chk${i}" checked onchange="window._ofx[${i}].selecionado=this.checked"><div style="flex:1"><div class="ofx-desc">${t.desc}</div><div style="font-size:10px;color:var(--text3)">${fmtD(t.data)} · ${t.tipo==='entrada'?'↑':'↓'}</div></div><div class="${t.tipo==='entrada'?'vp':'vn'}" style="min-width:85px;text-align:right;font-size:12px">${t.tipo==='entrada'?'+':'–'}${fmt(t.valor)}</div><select class="ofx-cat-sel" id="ofxSel${i}" onchange="window._ofx[${i}].catId=this.value">${opts}</select><select class="ofx-cat-sel" style="min-width:110px" id="ofxContaSel${i}" onchange="window._ofx[${i}].conta=this.value"><option value="sicoob" ${t.conta==='sicoob'?'selected':''}>Sicoob</option><option value="mercadopago" ${t.conta==='mercadopago'?'selected':''}>Mercado Pago</option></select><button onclick="abrirMiniCat(null,${i})" style="background:none;border:1px solid var(--border2);color:var(--g);font-size:10px;padding:3px 8px;border-radius:5px;cursor:pointer;white-space:nowrap;font-family:sans-serif">+ Cat.</button></div>`;
   }).join('');
+}
+
+function aplicarContaTodos() {
+  const conta=document.getElementById('contaLote').value;
+  if(!window._ofx||!window._ofx.length){toast('Nenhuma transação carregada',true);return}
+  window._ofx.forEach((t,i)=>{
+    t.conta=conta;
+    // select atualizado via querySelectorAll abaixo
+  });
+  // Atualizar visualmente todos os selects de conta na tela
+  document.querySelectorAll('[id^="ofxContaSel"]').forEach(sel=>{sel.value=conta});
+  const label=conta==='mercadopago'?'Mercado Pago':'Sicoob';
+  toast('Conta "'+label+'" aplicada em todas as transações');
 }
 
 function selecionarTodos(v){(window._ofx||[]).forEach((t,i)=>{t.selecionado=v;const c=document.getElementById('chk'+i);if(c)c.checked=v})}
@@ -1013,31 +1083,185 @@ function toast(msg,erro=false){
   setTimeout(()=>t.style.display='none',3000);
 }
 
+// IMPORTADOR CSV MERCADO PAGO
+function processarCSVMP(inp) {
+  const f=inp.files[0];
+  if(!f){return}
+  const ext=f.name.split('.').pop().toLowerCase();
+  if(ext==='xlsx') {
+    toast('Formato XLSX não suportado diretamente. Abra no Excel, salve como CSV e reimporte.',true);
+    inp.value='';
+    return;
+  }
+  const r=new FileReader();
+  r.onload=e=>{
+    try {
+      const ts=parseCSVMP(e.target.result);
+      if(!ts.length){toast('Nenhuma transação encontrada. Verifique se o arquivo é o extrato CSV do Mercado Pago.',true);return}
+      renderCSVMPPreview(ts);
+    } catch(err) {
+      toast('Erro ao ler o arquivo: '+err.message,true);
+    }
+  };
+  r.onloadend=null; // previne dupla execução
+  r.readAsText(f,'UTF-8');
+}
+
+function parseCSVMP(text) {
+  // Remove BOM se existir
+  text=text.replace(/^﻿/,'');
+  const linhas=text.split(/
+?
+/).filter(l=>l.trim());
+  if(linhas.length<2) return [];
+
+  // Detectar separador (vírgula ou ponto-e-vírgula)
+  const sep=linhas[0].includes(';')?';':',';
+  const headers=linhas[0].split(sep).map(h=>h.replace(/"/g,'').trim().toLowerCase());
+
+  // Mapear colunas — MP usa variações de nomes
+  const idxData=headers.findIndex(h=>h.includes('data')||h.includes('date'));
+  const idxDesc=headers.findIndex(h=>h.includes('descri')||h.includes('description')||h.includes('detalhe'));
+  const idxValor=headers.findIndex(h=>h.includes('valor')||h.includes('amount')||h.includes('quantia'));
+  const idxTipo=headers.findIndex(h=>h.includes('tipo')||h.includes('type')||h.includes('operação'));
+
+  if(idxData<0||idxValor<0) {
+    throw new Error('Colunas de data ou valor não encontradas. Verifique se é o extrato CSV do Mercado Pago.');
+  }
+
+  // Parser que respeita campos entre aspas
+  function parseLinha(linha, sep) {
+    const cols=[];let cur='';let inQ=false;
+    for(let ci=0;ci<linha.length;ci++){
+      const ch=linha[ci];
+      if(ch==='"'){inQ=!inQ;}
+      else if(ch===sep&&!inQ){cols.push(cur.trim());cur='';}
+      else{cur+=ch;}
+    }
+    cols.push(cur.trim());
+    return cols;
+  }
+
+  const result=[];
+  for(let i=1;i<linhas.length;i++){
+    const cols=parseLinha(linhas[i],sep);
+    if(cols.length<2||!cols[idxValor]) continue;
+
+    // Parsear valor — MP usa vírgula ou ponto como decimal
+    let valorStr=(cols[idxValor]||'0');
+    // Remove R$, espaços e preserva sinal negativo
+    const negativo=valorStr.includes('-');
+    valorStr=valorStr.replace(/[R$\s\-]/g,'').replace(/\./g,'').replace(',','.');
+    const valor=parseFloat(valorStr);
+    if(isNaN(valor)||valor===0) continue;
+
+    // Parsear data — MP usa DD/MM/YYYY ou YYYY-MM-DD
+    let dataStr=cols[idxData]||'';
+    let data='';
+    if(dataStr.includes('/')){
+      const p=dataStr.split('/');
+      if(p.length===3){
+        // DD/MM/YYYY
+        data=p[2].slice(0,4)+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');
+      }
+    } else if(dataStr.includes('-')){
+      data=dataStr.slice(0,10);
+    }
+    if(!data||data==='Invalid') continue;
+
+    const desc=idxDesc>=0?(cols[idxDesc]||'Sem descrição'):'Movimentação MP';
+    // Ignorar linhas de totais, resumos ou cabeçalhos repetidos
+    if(desc.toLowerCase().includes('total')||desc.toLowerCase().includes('saldo')||desc===cols[idxData]) continue;
+    const tipo=negativo?'saida':'entrada';
+    const catId=detectCat(desc, valor);
+
+    result.push({data, desc, valor:Math.abs(valor), tipo, catId, conta:'mercadopago', selecionado:true});
+  }
+  return result;
+}
+
+function renderCSVMPPreview(ts) {
+  document.getElementById('csvMPPreview').style.display='block';
+  document.getElementById('csvMPCount').textContent=ts.length+' transações encontradas (Mercado Pago)';
+  window._csvMP=ts;
+  document.getElementById('csvMPRows').innerHTML=ts.map((t,i)=>{
+    const opts=cats.map(c=>`<option value="${c.id}"${c.id===t.catId?' selected':''}>${c.nome}</option>`).join('');
+    return`<div class="ofx-row">
+      <input type="checkbox" class="ofx-check" id="csvchk${i}" checked onchange="window._csvMP[${i}].selecionado=this.checked">
+      <div style="flex:1">
+        <div class="ofx-desc">${t.desc}</div>
+        <div style="font-size:10px;color:#00b4d8;font-family:sans-serif">${fmtD(t.data)} · Mercado Pago · ${t.tipo==='entrada'?'↑':'↓'}</div>
+      </div>
+      <div class="${t.tipo==='entrada'?'vp':'vn'}" style="min-width:85px;text-align:right;font-size:12px">${t.tipo==='entrada'?'+':'–'}${fmt(t.valor)}</div>
+      <select class="ofx-cat-sel" id="csvSel${i}" onchange="window._csvMP[${i}].catId=this.value">${opts}</select>
+      <button onclick="abrirMiniCat(null,${i},'csv')" style="background:none;border:1px solid var(--border2);color:var(--g);font-size:10px;padding:3px 8px;border-radius:5px;cursor:pointer;white-space:nowrap;font-family:sans-serif">+ Cat.</button>
+    </div>`;
+  }).join('');
+}
+
+function selecionarTodosCSV(v) {
+  (window._csvMP||[]).forEach((t,i)=>{
+    t.selecionado=v;
+    const c=document.getElementById('csvchk'+i);
+    if(c) c.checked=v;
+  });
+}
+
+async function confirmarCSVMP() {
+  const sel=(window._csvMP||[]).filter(t=>t.selecionado);
+  if(!sel.length){toast('Selecione ao menos uma transação',true);return}
+  const btn=document.getElementById('btnConfirmarCSV');
+  btn.disabled=true;
+  loading(true,`Importando ${sel.length} transações do Mercado Pago...`);
+  let ok_count=0;
+  for(const t of sel){
+    const novo={id:uid(),data:t.data,valor:t.valor,desc:t.desc,catId:t.catId,tipo:t.tipo,fixo:false,parcelas:null,parcAtual:null,conta:'mercadopago'};
+    const ok=await dbInsert('lancamentos',toLancDB(novo));
+    if(ok){lancs.push(novo);ok_count++}
+  }
+  loading(false);
+  btn.disabled=false;
+  document.getElementById('csvMPPreview').style.display='none';
+  document.getElementById('csvMP').value='';
+  window._csvMP=[];
+  renderDash();
+  toast(ok_count+' transações do Mercado Pago importadas');
+}
+
 // INICIALIZAÇÃO
 async function init() {
   loading(true,'Conectando ao banco...');
   const ok=initSupabase();
   meta=parseFloat(localStorage.getItem('ff_meta')||'0');
 
-  if(ok && db) {
-    // Carrega dados do Supabase
-    const [lDB,cDB,fDB]=await Promise.all([
-      dbGet('lancamentos'),
-      dbGet('categorias'),
-      dbGet('fixos')
-    ]);
-    lancs=lDB.map(fromLancDB);
-    cats=cDB.length>0?cDB.map(fromCatDB):CATS_DEF;
-    fixos=fDB.map(fromFixoDB);
+  try {
+    if(ok && db) {
+      const [lDB,cDB,fDB]=await Promise.all([
+        dbGet('lancamentos'),
+        dbGet('categorias'),
+        dbGet('fixos')
+      ]);
+      lancs=lDB.map(fromLancDB);
+      fixos=fDB.map(fromFixoDB);
 
-    // Se não há categorias no banco, insere as padrão
-    if(cDB.length===0){
-      for(const c of CATS_DEF){
-        await dbInsert('categorias',toCatDB(c));
+      // Verificar se c11 (Retirada) existe — se não, inserir
+      const temC11=cDB.some(c=>c.id==='c11');
+      if(cDB.length===0){
+        for(const c of CATS_DEF){ await dbInsert('categorias',toCatDB(c)); }
+        cats=[...CATS_DEF];
+      } else {
+        cats=cDB.map(fromCatDB);
+        if(!temC11){
+          const c11=CATS_DEF.find(c=>c.id==='c11');
+          if(c11){ await dbInsert('categorias',toCatDB(c11)); cats.push(c11); }
+        }
       }
+    } else {
       cats=[...CATS_DEF];
     }
-  } else {
+  } catch(err) {
+    console.error('Erro ao inicializar:',err);
+    toast('Erro ao conectar ao banco. Verifique sua conexão.',true);
     cats=[...CATS_DEF];
   }
 
