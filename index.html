@@ -1109,10 +1109,8 @@ function processarCSVMP(inp) {
 
 function parseCSVMP(text) {
   // Remove BOM se existir
-  text=text.replace(/^﻿/,'');
-  const linhas=text.split(/
-?
-/).filter(l=>l.trim());
+  if(text.charCodeAt(0)===0xFEFF) text=text.slice(1); // Remove BOM
+  const linhas=text.split(/\r?\n/).filter(l=>l.trim());
   if(linhas.length<2) return [];
 
   // Detectar separador (vírgula ou ponto-e-vírgula)
