@@ -502,6 +502,7 @@ const CATS_DEF=[
   {id:'c9',nome:'Método FBB / Mentorias',tipo:'entrada',cor:'#4c8faf'},
   {id:'c10',nome:'Outros',tipo:'ambos',cor:'#7a6a62'},
   {id:'c11',nome:'Retirada / Pró-labore',tipo:'saida',cor:'#9d9fd4'},
+  {id:'c12',nome:'Estornos / Reembolsos',tipo:'entrada',cor:'#5a8a9d'},
 ];
 
 let lancs=[], cats=[], fixos=[], meta=0;
@@ -928,13 +929,14 @@ async function salvarMeta() {
 
 // OFX
 const REGRAS=[
-  {match:['fini','bala','amendoim','polenguinho','biscoito','chocolate','café','nutella','granola','mel','atum','sardinha','suco','agua ','pão','queijo','leite','supermercado','mercado','atacado'],catId:'c1'},
-  {match:['embalagem','fita','laço','ribbon','celofane','tag','etiqueta','saco kraft','caixa kraft'],catId:'c2'},
+  {match:['fini','bala','amendoim','polenguinho','biscoito','chocolate','café','nutella','granola','mel','atum','sardinha','suco','agua ','pão','queijo','leite','supermercado','mercado','atacado','laticinios','laticínios','itambe','itambé','doces','flores'],catId:'c1'},
+  {match:['embalagem','fita','laço','ribbon','celofane','tag','etiqueta','saco kraft','caixa kraft','ceramica','cerâmica'],catId:'c2'},
   {match:['ifood','motoboy','lalamove','loggi','entregador','frete','uber entrega','correios','entrega'],catId:'c3'},
-  {match:['aluguel','condominio','água','luz ','energia','gás','internet','claro ','oi ','vivo ','tim '],catId:'c5'},
-  {match:['meta ','google ','instagram','tiktok','ads','anuncio','anúncio'],catId:'c6'},
-  {match:['salario','salário','funcionario','prolabore'],catId:'c7'},
-  {match:['pix recebido','ted recebido','crédito em conta','deposito recebido','depósito'],catId:'c8',tipo:'entrada'},
+  {match:['aluguel','condominio','condomínio','água','luz ','energia','gás','internet','claro ','oi ','vivo ','tim ','seguro','consorcio','consórcio','adm de imoveis','adm de imóveis'],catId:'c5'},
+  {match:['meta ','google ','instagram','tiktok','ads','anuncio','anúncio','design'],catId:'c6'},
+  {match:['salario','salário','funcionario','funcionário','prolabore','pró-labore'],catId:'c7'},
+  {match:['reembolso','estorno','contestaç','tarifa devolvida','chargeback'],catId:'c12',tipo:'entrada'},
+  {match:['pix recebido','ted recebido','crédito em conta','deposito recebido','depósito','liberação de dinheiro','liberacao de dinheiro'],catId:'c8',tipo:'entrada'},
 ];
 
 function detectCat(desc,val){
@@ -1109,26 +1111,40 @@ function processarCSVMP(inp) {
 
 function parseCSVMP(text) {
   // Remove BOM se existir
-  if(text.charCodeAt(0)===0xFEFF) text=text.slice(1); // Remove BOM
-  const linhas=text.split(/\r?\n/).filter(l=>l.trim());
-  if(linhas.length<2) return [];
+  if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
 
-  // Detectar separador (vírgula ou ponto-e-vírgula)
-  const sep=linhas[0].includes(';')?';':',';
-  const headers=linhas[0].split(sep).map(h=>h.replace(/"/g,'').trim().toLowerCase());
+  const todasLinhas=text.split(/\r?\n/);
 
-  // Mapear colunas — MP usa variações de nomes
-  const idxData=headers.findIndex(h=>h.includes('data')||h.includes('date'));
-  const idxDesc=headers.findIndex(h=>h.includes('descri')||h.includes('description')||h.includes('detalhe'));
-  const idxValor=headers.findIndex(h=>h.includes('valor')||h.includes('amount')||h.includes('quantia'));
-  const idxTipo=headers.findIndex(h=>h.includes('tipo')||h.includes('type')||h.includes('operação'));
-
-  if(idxData<0||idxValor<0) {
-    throw new Error('Colunas de data ou valor não encontradas. Verifique se é o extrato CSV do Mercado Pago.');
+  // O formato do MP tem 2 seções separadas por linha em branco:
+  // Linhas 1-2: resumo (INITIAL_BALANCE etc) — ignorar
+  // Linha 4: cabeçalho real (RELEASE_DATE;TRANSACTION_TYPE;...)
+  // Linhas 5+: transações
+  // Estratégia: encontrar a linha que contém RELEASE_DATE ou DATE como cabeçalho
+  let headerIdx = -1;
+  for(let i=0;i<todasLinhas.length;i++){
+    const l=todasLinhas[i].toUpperCase();
+    if(l.includes('RELEASE_DATE')||l.includes('DATA')||l.includes('DATE')){
+      // Confirmar que é linha de cabeçalho (não uma transação)
+      if(!l.match(/^\d{2}[-\/]\d{2}/)){
+        headerIdx=i;
+        break;
+      }
+    }
   }
+  if(headerIdx<0) throw new Error('Formato não reconhecido. Verifique se é o extrato CSV do Mercado Pago.');
+
+  const sep=todasLinhas[headerIdx].includes(';')?';':',';
+  const headers=todasLinhas[headerIdx].split(sep).map(h=>h.replace(/"/g,'').trim().toUpperCase());
+
+  // Mapear colunas pelo nome exato do MP
+  const idxData=headers.findIndex(h=>h.includes('RELEASE_DATE')||h.includes('DATA')||h.includes('DATE'));
+  const idxDesc=headers.findIndex(h=>h.includes('TRANSACTION_TYPE')||h.includes('DESCRI')||h.includes('TIPO')||h.includes('TYPE'));
+  const idxValor=headers.findIndex(h=>h.includes('TRANSACTION_NET_AMOUNT')||h.includes('VALOR')||h.includes('AMOUNT'));
+
+  if(idxData<0||idxValor<0) throw new Error('Colunas essenciais não encontradas. Verifique o formato do CSV.');
 
   // Parser que respeita campos entre aspas
-  function parseLinha(linha, sep) {
+  function parseLinha(linha) {
     const cols=[];let cur='';let inQ=false;
     for(let ci=0;ci<linha.length;ci++){
       const ch=linha[ci];
@@ -1141,54 +1157,78 @@ function parseCSVMP(text) {
   }
 
   const result=[];
-  for(let i=1;i<linhas.length;i++){
-    const cols=parseLinha(linhas[i],sep);
-    if(cols.length<2||!cols[idxValor]) continue;
+  for(let i=headerIdx+1;i<todasLinhas.length;i++){
+    const linha=todasLinhas[i].trim();
+    if(!linha) continue;
+    const cols=parseLinha(linha);
+    if(cols.length<=idxValor) continue;
 
-    // Parsear valor — MP usa vírgula ou ponto como decimal
-    let valorStr=(cols[idxValor]||'0');
-    // Remove R$, espaços e preserva sinal negativo
+    // Parsear valor
+    let valorStr=(cols[idxValor]||'').replace(/"/g,'').trim();
+    if(!valorStr) continue;
     const negativo=valorStr.includes('-');
-    valorStr=valorStr.replace(/[R$\s\-]/g,'').replace(/\./g,'').replace(',','.');
-    const valor=parseFloat(valorStr);
+    // Remove tudo exceto dígitos e separador decimal
+    // MP BR: 1.234,56 → remover ponto, trocar vírgula por ponto
+    valorStr=valorStr.replace(/[^\d,\.\-]/g,'');
+    // Se tem vírgula, é separador decimal BR (1.234,56)
+    if(valorStr.includes(',')){
+      valorStr=valorStr.replace(/\./g,'').replace(',','.');
+    }
+    const valor=parseFloat(valorStr.replace('-',''));
     if(isNaN(valor)||valor===0) continue;
 
-    // Parsear data — MP usa DD/MM/YYYY ou YYYY-MM-DD
-    let dataStr=cols[idxData]||'';
+    // Parsear data — MP usa DD-MM-YYYY ou DD/MM/YYYY
+    let dataStr=(cols[idxData]||'').replace(/"/g,'').trim();
     let data='';
-    if(dataStr.includes('/')){
-      const p=dataStr.split('/');
-      if(p.length===3){
-        // DD/MM/YYYY
+    const sep2=dataStr.includes('-')?'-':'/';
+    const p=dataStr.split(sep2);
+    if(p.length===3){
+      if(p[0].length===4){
+        // YYYY-MM-DD
+        data=dataStr.slice(0,10);
+      } else {
+        // DD-MM-YYYY ou DD/MM/YYYY
         data=p[2].slice(0,4)+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');
       }
-    } else if(dataStr.includes('-')){
-      data=dataStr.slice(0,10);
     }
-    if(!data||data==='Invalid') continue;
+    if(!data) continue;
 
-    const desc=idxDesc>=0?(cols[idxDesc]||'Sem descrição'):'Movimentação MP';
-    // Ignorar linhas de totais, resumos ou cabeçalhos repetidos
-    if(desc.toLowerCase().includes('total')||desc.toLowerCase().includes('saldo')||desc===cols[idxData]) continue;
+    // Descrição
+    const desc=idxDesc>=0?((cols[idxDesc]||'').replace(/"/g,'').trim()||'Movimentação MP'):'Movimentação MP';
+
+    // Ignorar linhas de resumo/totais
+    if(desc.toUpperCase().includes('INITIAL_BALANCE')||
+       desc.toUpperCase().includes('FINAL_BALANCE')||
+       desc.toUpperCase().includes('CREDITS')||
+       desc.toUpperCase().includes('DEBITS')) continue;
+
+    // Ignorar apenas cancelamentos e dinheiro retido (não são receita nem custo real)
+    // Pagamentos de conta/boleto SÃO custos reais da Fabbri — não excluir
+    const descLower=desc.toLowerCase();
+    const ignorar=descLower.includes('cancelad')||descLower.includes('retido')||descLower.includes('contestaç');
     const tipo=negativo?'saida':'entrada';
-    const catId=detectCat(desc, valor);
+    // Usa detectCat para os dois sentidos — reembolsos/estornos caem em c12, vendas em c8, custos detectados por palavra-chave
+    const catId=detectCat(desc, tipo==='entrada'?1:-1);
 
-    result.push({data, desc, valor:Math.abs(valor), tipo, catId, conta:'mercadopago', selecionado:true});
+    result.push({data, desc, valor, tipo, catId, conta:'mercadopago', selecionado:!ignorar, alerta:null});
   }
   return result;
 }
 
 function renderCSVMPPreview(ts) {
   document.getElementById('csvMPPreview').style.display='block';
-  document.getElementById('csvMPCount').textContent=ts.length+' transações encontradas (Mercado Pago)';
+  const alertas=ts.filter(t=>t.alerta).length;
+  document.getElementById('csvMPCount').innerHTML=ts.length+' transações encontradas (Mercado Pago)'+(alertas>0?` · <span style="color:var(--g)">${alertas} desmarcadas automaticamente (transferências/cancelamentos)</span>`:'');
   window._csvMP=ts;
   document.getElementById('csvMPRows').innerHTML=ts.map((t,i)=>{
     const opts=cats.map(c=>`<option value="${c.id}"${c.id===t.catId?' selected':''}>${c.nome}</option>`).join('');
-    return`<div class="ofx-row">
-      <input type="checkbox" class="ofx-check" id="csvchk${i}" checked onchange="window._csvMP[${i}].selecionado=this.checked">
+    const alertaHtml=t.alerta?`<div style="font-size:10px;color:var(--g);margin-top:2px"><i class="ti ti-alert-triangle" style="font-size:10px"></i> ${t.alerta}</div>`:'';
+    return`<div class="ofx-row" style="${t.alerta?'background:rgba(201,168,76,0.05)':''}">
+      <input type="checkbox" class="ofx-check" id="csvchk${i}" ${t.selecionado?'checked':''} onchange="window._csvMP[${i}].selecionado=this.checked">
       <div style="flex:1">
         <div class="ofx-desc">${t.desc}</div>
         <div style="font-size:10px;color:#00b4d8;font-family:sans-serif">${fmtD(t.data)} · Mercado Pago · ${t.tipo==='entrada'?'↑':'↓'}</div>
+        ${alertaHtml}
       </div>
       <div class="${t.tipo==='entrada'?'vp':'vn'}" style="min-width:85px;text-align:right;font-size:12px">${t.tipo==='entrada'?'+':'–'}${fmt(t.valor)}</div>
       <select class="ofx-cat-sel" id="csvSel${i}" onchange="window._csvMP[${i}].catId=this.value">${opts}</select>
@@ -1242,16 +1282,18 @@ async function init() {
       lancs=lDB.map(fromLancDB);
       fixos=fDB.map(fromFixoDB);
 
-      // Verificar se c11 (Retirada) existe — se não, inserir
-      const temC11=cDB.some(c=>c.id==='c11');
       if(cDB.length===0){
         for(const c of CATS_DEF){ await dbInsert('categorias',toCatDB(c)); }
         cats=[...CATS_DEF];
       } else {
         cats=cDB.map(fromCatDB);
-        if(!temC11){
-          const c11=CATS_DEF.find(c=>c.id==='c11');
-          if(c11){ await dbInsert('categorias',toCatDB(c11)); cats.push(c11); }
+        // Verifica categorias padrão novas (ex: c11, c12) que ainda não existem no banco do usuário
+        const idsExistentes=new Set(cats.map(c=>c.id));
+        for(const cPadrao of CATS_DEF){
+          if(!idsExistentes.has(cPadrao.id)){
+            await dbInsert('categorias',toCatDB(cPadrao));
+            cats.push(cPadrao);
+          }
         }
       }
     } else {
