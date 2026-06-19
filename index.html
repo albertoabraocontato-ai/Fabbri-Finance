@@ -255,6 +255,9 @@ tr:hover .row-actions{opacity:1}
             <button class="fpill" onclick="filtrar('retirada',this)">Retiradas</button>
             <button class="fpill" onclick="filtrar('sicoob',this)">Sicoob</button>
             <button class="fpill" onclick="filtrar('mercadopago',this)">Mercado Pago</button>
+            <select id="filtroCat" onchange="renderLancs()" style="background:var(--surface3);border:1px solid var(--border);color:var(--text2);padding:5px 10px;border-radius:20px;font-size:11px;outline:none;cursor:pointer">
+              <option value="">Todas categorias</option>
+            </select>
             <div class="search-wrap"><i class="ti ti-search"></i><input class="search-input" id="buscaInp" placeholder="Buscar..." oninput="renderLancs()"></div>
           </div>
           <button class="btn-primary" onclick="abrirModal()"><i class="ti ti-plus"></i>Novo lançamento</button>
@@ -642,6 +645,16 @@ function renderDash() {
 }
 
 function renderLancs() {
+  // Popular o select de categorias mantendo a seleção atual
+  const selCat=document.getElementById('filtroCat');
+  if(selCat){
+    const catAtual=selCat.value;
+    const opcoes=['<option value="">Todas categorias</option>']
+      .concat(cats.map(c=>`<option value="${c.id}"${c.id===catAtual?' selected':''}>${c.nome}</option>`));
+    selCat.innerHTML=opcoes.join('');
+  }
+  const filtroCatVal=selCat?selCat.value:'';
+
   const busca=(document.getElementById('buscaInp')?.value||'').toLowerCase();
   let ls=getLancs();
   const contaFiltros=['sicoob','mercadopago'];
@@ -649,6 +662,7 @@ function renderLancs() {
     if(contaFiltros.includes(filtroT)) ls=ls.filter(l=>l.conta===filtroT);
     else ls=ls.filter(l=>l.tipo===filtroT);
   }
+  if(filtroCatVal) ls=ls.filter(l=>l.catId===filtroCatVal);
   if(busca)ls=ls.filter(l=>l.desc.toLowerCase().includes(busca));
   ls.sort((a,b)=>b.data.localeCompare(a.data));
   document.getElementById('tblCompleta').innerHTML=ls.map(l=>{const c=catById(l.catId);const tipoLabel=l.tipo==='entrada'?'Entrada':l.tipo==='retirada'?'Retirada':'Saída';
